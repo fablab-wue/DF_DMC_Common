@@ -1,0 +1,11 @@
+.pio
+.vscode
+.pioenvs
+.piolibdeps
+.DS_Store
+*.bin
+*.uf2
+.venv/
+__pycache__/
+.cursor/
+*.pyc
