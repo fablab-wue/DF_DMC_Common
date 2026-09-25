@@ -2,7 +2,7 @@
 
 Shared Dragonframe **DMC v2** pieces for Pico firmwares. [DF_DMC_2_MC](https://github.com/fablab-wue/DF_DMC_2_MC) and [DF_DMC_2_PWM](https://github.com/fablab-wue/DF_DMC_2_PWM) both use this library. Later boards with a Dragonframe DMC interface should use it too.
 
-**Documentation:** [API](docs/api.md) · [Dragonframe connect](docs/dragonframe.md)
+**Documentation:** [API](docs/api.md) · [Dragonframe connect](docs/dragonframe.md) · [Go motion](docs/dragonframe.md#go-motion)
 
 ## What is in here
 

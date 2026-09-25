@@ -37,8 +37,10 @@ constexpr uint16_t kDmcMsgRtUploadEnd = 0x0103;
 constexpr uint16_t kDmcMsgRtUploadTriggers = 0x0104;
 constexpr uint16_t kDmcMsgRtPositionFrame = 0x0110;
 constexpr uint16_t kDmcMsgRtRunMove = 0x0111;
+constexpr uint16_t kDmcMsgRtShootFrame = 0x0112;
 constexpr uint16_t kDmcMsgRtGo = 0x0113;
 constexpr uint16_t kDmcMsgRtEnd = 0x0114;
+constexpr uint16_t kDmcMsgRtShootFrame2 = 0x0115;
 constexpr uint16_t kDmcMsgRtJogAll = 0x0120;
 
 constexpr uint32_t kDmcAckOk = 0x0010;
@@ -47,9 +49,13 @@ constexpr uint32_t kDmcAckErrMoving = 0x0012;
 constexpr uint32_t kDmcAckErrUnsupported = 0x0013;
 constexpr uint32_t kDmcAckErrRange = 0x0014;
 constexpr uint32_t kDmcAckErrGeneral = 0x0015;
+constexpr uint32_t kDmcAckErrNotInPosition = 0x0016;
 
 constexpr uint8_t kDmcMotorConfigEnabled = 0x01;
+constexpr uint8_t kDmcMotorConfigBlur = 0x02;
 constexpr uint32_t kDmcCapRealTime = 0x0001;
+constexpr uint32_t kDmcCapGoMotion = 0x0002;
+constexpr uint32_t kDmcCapGoMotion2 = 0x0080;
 constexpr uint32_t kDmcCapRealTimeCamera = 0x0400;
 constexpr uint32_t kDmcDmxFlagFinalSet = 0x80000000U;
 constexpr uint32_t kDmcGioCamShutter = 0x0001;
