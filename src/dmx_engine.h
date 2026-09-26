@@ -14,6 +14,7 @@ class DmxEngine {
  public:
   void begin(uint8_t txPin, const uint8_t* pwmPins, uint8_t pwmCount, uint32_t pwmHz, bool exponential);
   bool ramping() const { return ramping_; }
+  uint8_t levelAt(uint16_t channel1) const;
   void apply(uint16_t startChannel, const uint8_t* levels, uint16_t count, bool ramp);
   void update();
 
@@ -21,7 +22,7 @@ class DmxEngine {
   void sendNow();
   void beginPwm();
   void writePwm();
-  uint8_t pwmLevel(uint8_t channelLevel) const;
+  uint16_t pwmLevel(uint8_t channelLevel) const;
   SerialPIO& uart();
 
   alignas(SerialPIO) unsigned char uartMem_[sizeof(SerialPIO)]{};

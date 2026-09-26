@@ -32,11 +32,19 @@ void DmxEngine::begin(uint8_t txPin, const uint8_t* pwmPins, uint8_t pwmCount, u
   writePwm();
 }
 
-uint8_t DmxEngine::pwmLevel(uint8_t channelLevel) const {
+uint8_t DmxEngine::levelAt(uint16_t channel1) const {
+  if (channel1 < 1 || channel1 > kDmxChannels) {
+    return 0;
+  }
+  return current_[channel1 - 1];
+}
+
+uint16_t DmxEngine::pwmLevel(uint8_t channelLevel) const {
   if (!exponential_) {
     return channelLevel;
   }
-  return static_cast<uint8_t>((static_cast<uint16_t>(channelLevel) * channelLevel) / 255u);
+  const uint16_t level = channelLevel;
+  return static_cast<uint16_t>(level * level);
 }
 
 void DmxEngine::apply(uint16_t startChannel, const uint8_t* levels, uint16_t count, bool ramp) {
@@ -91,10 +99,18 @@ void DmxEngine::beginPwm() {
   if (pwmCount_ == 0 || pwmPins_ == nullptr) {
     return;
   }
-  const float div = static_cast<float>(clock_get_hz(clk_sys)) / (static_cast<float>(pwmHz_) * 255.0f);
+  const uint32_t top = exponential_ ? (254u * 255u) : 254u;
+  const float cycles = static_cast<float>(top + 1u);
+  float div = static_cast<float>(clock_get_hz(clk_sys)) / (static_cast<float>(pwmHz_) * cycles);
+  if (div < 1.0f) {
+    div = 1.0f;
+  }
+  if (div > 256.0f) {
+    div = 256.0f;
+  }
   pwm_config cfg = pwm_get_default_config();
   pwm_config_set_clkdiv(&cfg, div);
-  pwm_config_set_wrap(&cfg, 254);
+  pwm_config_set_wrap(&cfg, static_cast<uint16_t>(top));
   bool sliceInited[8] = {};
   for (uint8_t i = 0; i < pwmCount_; ++i) {
     const uint8_t pin = pwmPins_[i];
