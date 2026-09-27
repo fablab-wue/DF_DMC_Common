@@ -1,39 +1,16 @@
-# Connecting a DF_DMC board to Dragonframe
+# Go motion
 
-[← Index](../README.md)
+[← User manual](manual.md)
 
-This is the same for [DF_DMC_2_MC](https://github.com/fablab-wue/DF_DMC_2_MC) and [DF_DMC_2_PWM](https://github.com/fablab-wue/DF_DMC_2_PWM).
+Connect, steps per unit, features, limits, GIO, and pin tables are in the [user manual](manual.md). This page is the shoot-frame payload.
 
-## Connect
+Dragonframe only offers these messages when the hello capabilities include the matching bit: `GO_MOTION` `0x0002` for `SHOOT_FRAME`, `GO_MOTION2` `0x0080` for `SHOOT_FRAME2`. PWM and MKS advertise both. MC does not.
 
-1. Close anything else that has the board’s COM port open (PlatformIO monitor, a terminal).
-2. In Dragonframe: **Scene → Connections → Add connection**.
-3. Device type **dmc-lite**.
-4. Select this board’s serial port.
-5. **Connect**.
+Using Dragonframe’s own description of an external rig: [Using Dragonframe 2025](https://www.dragonframe.com/download/Using%20Dragonframe%202025.pdf), Chapter 15, “Using Go-Motion with an External Motion Control System”, page 265.
 
-The board sends a hello when the port opens, and answers Dragonframe’s `MSG_HI`. USB CDC is **binary DMC**. The serial monitor is not a text console.
+## Messages
 
-Dragonframe’s own pages:
-
-- [How do I integrate a motion control system?](https://www.dragonframe.com/ufaqs/how-do-i-integrate-a-motion-control-system-with-dragonframe/)
-- [Where do I find the dmc-lite Arduino sketch?](https://www.dragonframe.com/ufaqs/where-do-i-find-the-dmc-lite-arduino-sketch/) — installed with Dragonframe, not in these repos
-- [DMC v2 protocol PDF (2024-08-13)](https://www.dragonframe.com/download/dmcproto/DMC-Protocol-2024-08-13.pdf)
-
-## Which scale
-
-| Board | In Arc |
-|-------|--------|
-| DF_DMC_2_MC | **steps per unit = 1000** (1000 steps = 1 mm or 1 deg). [Overview](https://github.com/fablab-wue/DF_DMC_2_MC/blob/main/docs/overview.md) |
-| DF_DMC_2_PWM | Use the step integers as they are. Do **not** set 1000. Pulse scale: [dragonframe.md](https://github.com/fablab-wue/DF_DMC_2_PWM/blob/main/docs/dragonframe.md) |
-
-One DMC connection exposes at most 16 motors. The DIP on the PWM board chooses how many of those are servos.
-
-## Go motion
-
-Both `SHOOT_FRAME` (`0x0112`) and `SHOOT_FRAME2` (`0x0115`) are go motion. Dragonframe only offers them when the hello capabilities include the matching bit: `GO_MOTION` `0x0002` for `SHOOT_FRAME`, `GO_MOTION2` `0x0080` for `SHOOT_FRAME2`. Both boards advertise both bits.
-
-Axes take part only when `MOTOR_CONFIGURE` has the blur flag `0x02`. Other axes hold the frame pose.
+Axes take part only when `MOTOR_CONFIGURE` has the blur flag `0x02`. Other axes hold the frame pose. PWM and MKS advertise both shoot messages. MC does not.
 
 Sequence for both: the device prerolls and stops; `GO` before that is idle returns not-in-position (`0x0016`); `GO` runs the blur; the local camera shutter opens only while the axis should be at constant speed. A still does not send `MSG_RT_END` (that message is for live path playback).
 
@@ -57,7 +34,7 @@ If the open angle is negative, the shutter opens at `GO` and the motors wait −
 
 ## Using go motion
 
-1. Connect the DMC device (jDF-PWM or jDF-MC) as in [Connect](#connect).
+1. Connect the DMC device as in the [user manual](manual.md#connect). PWM and MKS run go motion. MC does not advertise it.
 2. In the arc / motion-control axis setup, enable the axis and turn on blur (go motion) for the axes that should move during the exposure. Axes without blur stay on the frame pose.
 3. Upload or capture the move so the path is on the device.
 4. In the go-motion / exposure controls, set exposure time and blur percent. That uses `SHOOT_FRAME`. A blur of 50% moves about half a frame of the path while the shutter is open, with one second of acceleration before and one second of deceleration after.

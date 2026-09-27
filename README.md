@@ -1,8 +1,8 @@
 # DF_DMC_Common
 
-Shared Dragonframe **DMC v2** pieces for Pico firmwares. [DF_DMC_2_MC](https://github.com/fablab-wue/DF_DMC_2_MC) and [DF_DMC_2_PWM](https://github.com/fablab-wue/DF_DMC_2_PWM) both use this library. Later boards with a Dragonframe DMC interface should use it too.
+Shared Dragonframe **DMC v2** pieces for Pico firmwares. [DF_DMC_2_MC](https://github.com/fablab-wue/DF_DMC_2_MC), [DF_DMC_2_PWM](https://github.com/fablab-wue/DF_DMC_2_PWM), and [DF_DMC_2_MKS](https://github.com/fablab-wue/DF_DMC_2_MKS) use this library.
 
-**Documentation:** [API](docs/api.md) · [Dragonframe connect](docs/dragonframe.md) · [Go motion](docs/dragonframe.md#go-motion)
+**Documentation:** [User manual](docs/manual.md) · [API](docs/api.md) · [Go motion](docs/dragonframe.md#go-motion)
 
 ## What is in here
 
@@ -22,7 +22,7 @@ lib_deps =
     symlink://../DF_DMC_Common
 ```
 
-`DFDMC_MAX_AXES` sizes the path table (default 6). `DF_DMC_2_PWM` sets it to 16. Optional `DFDMC_MAX_UPLOAD_FRAMES` defaults to 2048.
+`DFDMC_MAX_AXES` sizes the path table (default 6). `DF_DMC_2_PWM` and `DF_DMC_2_MKS` set it to 16. Optional `DFDMC_MAX_UPLOAD_FRAMES` defaults to 1440. The timeline DMX track holds 32 channels for that many frames.
 
 Sources live in `src/` under the `dfdmc` namespace: `dmc_protocol`, `path_table`, `dmx_engine`, `gio_io`.
 

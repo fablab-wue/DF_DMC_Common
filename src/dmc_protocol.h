@@ -50,6 +50,8 @@ constexpr uint32_t kDmcAckErrUnsupported = 0x0013;
 constexpr uint32_t kDmcAckErrRange = 0x0014;
 constexpr uint32_t kDmcAckErrGeneral = 0x0015;
 constexpr uint32_t kDmcAckErrNotInPosition = 0x0016;
+constexpr uint32_t kDmcAckErrSoftUp = 0x0020;
+constexpr uint32_t kDmcAckErrSoftLow = 0x0021;
 
 constexpr uint8_t kDmcMotorConfigEnabled = 0x01;
 constexpr uint8_t kDmcMotorConfigBlur = 0x02;

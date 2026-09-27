@@ -10,18 +10,20 @@
 #endif
 
 #ifndef DFDMC_MAX_UPLOAD_FRAMES
-#define DFDMC_MAX_UPLOAD_FRAMES 2048
+#define DFDMC_MAX_UPLOAD_FRAMES 1440
 #endif
 
 namespace dfdmc {
 
 constexpr int kMaxAxes = DFDMC_MAX_AXES;
 constexpr int kMaxUploadFrames = DFDMC_MAX_UPLOAD_FRAMES;
+constexpr int kMaxDmxProgramChannels = 32;
 
 class PathTable {
  public:
   void beginUpload(int32_t startFrame, int32_t endFrame, int axisCount);
   bool storeAxis(int motor1, uint32_t index, const int32_t* values, int n, bool finalFill);
+  bool storeDmx(int channel1, uint32_t index, const uint8_t* levels, int n, bool finalFill);
   void storeTrigger(uint32_t mask, uint32_t index, uint32_t value);
   bool finishUpload();
 
@@ -35,10 +37,16 @@ class PathTable {
   int32_t positionSteps(int axis0, int localFrame) const;
   bool localFrame(int dfFrame, int* out) const;
   uint8_t triggerAtLocal(int localFrame) const;
+  int dmxSlotCount() const { return dmxSlots_; }
+  uint16_t dmxChannel(int slot) const;
+  uint8_t dmxLevel(int slot, int localFrame) const;
 
  private:
   int32_t pos_[kMaxAxes][kMaxUploadFrames]{};
   uint8_t triggers_[kMaxUploadFrames]{};
+  uint16_t dmxChannel_[kMaxDmxProgramChannels]{};
+  uint8_t dmxLevel_[kMaxDmxProgramChannels][kMaxUploadFrames]{};
+  int dmxSlots_ = 0;
   int frameCount_ = 0;
   int startFrame_ = 1;
   int endFrame_ = 1;
