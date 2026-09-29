@@ -9,6 +9,17 @@
 
 namespace dfdmc {
 
+// E1.11 transmitter limits: BREAK >= 92 µs (typical 176), MAB >= 12 µs.
+// The PIO UART stays up. BREAK is a GPIO override so the line is not
+// glitched by tearing the state machine down between frames.
+constexpr uint32_t kBreakUs = 176;
+constexpr uint32_t kMabUs = 24;
+// FIFO-empty still leaves the last slot in the shifter (~48 µs at 12 bits).
+constexpr uint32_t kTailUs = 64;
+// 8-deep TX FIFO holds ~384 µs. Refill well inside that, from a timer,
+// so a slow main loop during realtime play cannot stretch the universe.
+constexpr int64_t kTxTickUs = 150;
+
 SerialPIO& DmxEngine::uart() { return *reinterpret_cast<SerialPIO*>(uartMem_); }
 
 void DmxEngine::begin(uint8_t txPin, const uint8_t* pwmPins, uint8_t pwmCount, uint32_t pwmHz, bool exponential) {
@@ -21,15 +32,29 @@ void DmxEngine::begin(uint8_t txPin, const uint8_t* pwmPins, uint8_t pwmCount, u
   memset(target_, 0, sizeof(target_));
   memset(start_, 0, sizeof(start_));
   ramping_ = false;
-  lastSendMs_ = 0;
+  txState_ = TxState::Idle;
   if (!uartLive_) {
     new (uartMem_) SerialPIO(txPin_, NOPIN);
     uartLive_ = true;
   }
   uart().begin(250000, SERIAL_8N2);
   txReady_ = static_cast<bool>(uart());
+  if (txReady_ && !txTimerOn_) {
+    txTimerOn_ = add_repeating_timer_us(-kTxTickUs, &DmxEngine::onTxTimer, this, &txTimer_);
+  }
   beginPwm();
   writePwm();
+}
+
+bool DmxEngine::onTxTimer(repeating_timer_t* timer) {
+  static_cast<DmxEngine*>(timer->user_data)->onTick();
+  return true;
+}
+
+void DmxEngine::publish(const uint8_t* levels) {
+  noInterrupts();
+  memcpy(current_, levels, sizeof(current_));
+  interrupts();
 }
 
 uint8_t DmxEngine::levelAt(uint16_t channel1) const {
@@ -62,9 +87,9 @@ void DmxEngine::apply(uint16_t startChannel, const uint8_t* levels, uint16_t cou
   memcpy(target_, current_, sizeof(target_));
   memcpy(target_ + start, levels, count);
   if (!ramp) {
-    memcpy(current_, target_, sizeof(current_));
+    publish(target_);
     ramping_ = false;
-    sendNow();
+    writePwm();
     return;
   }
   rampStartMs_ = millis();
@@ -72,26 +97,69 @@ void DmxEngine::apply(uint16_t startChannel, const uint8_t* levels, uint16_t cou
 }
 
 void DmxEngine::update() {
-  const uint32_t now = millis();
-  if (!ramping_) {
-    return;
+  if (ramping_) {
+    const uint32_t elapsed = millis() - rampStartMs_;
+    constexpr uint32_t kRampMs = 500;
+    float t = static_cast<float>(elapsed) / static_cast<float>(kRampMs);
+    if (t >= 1.0f) {
+      publish(target_);
+      ramping_ = false;
+    } else {
+      uint8_t stepped[kDmxChannels];
+      for (int i = 0; i < kDmxChannels; ++i) {
+        const int a = start_[i];
+        const int b = target_[i];
+        stepped[i] = static_cast<uint8_t>(a + static_cast<int>((b - a) * t));
+      }
+      publish(stepped);
+    }
+    writePwm();
   }
-  const uint32_t elapsed = now - rampStartMs_;
-  constexpr uint32_t kRampMs = 500;
-  float t = static_cast<float>(elapsed) / static_cast<float>(kRampMs);
-  if (t >= 1.0f) {
-    memcpy(current_, target_, sizeof(current_));
-    ramping_ = false;
-    sendNow();
-    return;
+  if (!txTimerOn_) {
+    serviceTx();
   }
-  for (int i = 0; i < kDmxChannels; ++i) {
-    const int a = start_[i];
-    const int b = target_[i];
-    current_[i] = static_cast<uint8_t>(a + static_cast<int>((b - a) * t));
-  }
-  if (now - lastSendMs_ >= 25) {
-    sendNow();
+}
+
+void DmxEngine::onTick() {
+  const uint32_t now = micros();
+  switch (txState_) {
+    case TxState::Idle:
+      gpio_set_outover(txPin_, GPIO_OVERRIDE_LOW);
+      markUs_ = now;
+      txState_ = TxState::Break;
+      break;
+    case TxState::Break:
+      if (static_cast<uint32_t>(now - markUs_) >= kBreakUs) {
+        gpio_set_outover(txPin_, GPIO_OVERRIDE_NORMAL);
+        markUs_ = now;
+        txState_ = TxState::Mab;
+      }
+      break;
+    case TxState::Mab:
+      if (static_cast<uint32_t>(now - markUs_) >= kMabUs) {
+        memcpy(frame_, current_, sizeof(frame_));
+        slot_ = 0;
+        startSent_ = false;
+        txState_ = TxState::Data;
+        feedFifo();
+      }
+      break;
+    case TxState::Data:
+      feedFifo();
+      break;
+    case TxState::Tail:
+      if (uart().availableForWrite() < 8) {
+        tailIdleUs_ = 0;
+        break;
+      }
+      if (tailIdleUs_ == 0) {
+        tailIdleUs_ = now == 0 ? 1 : now;
+        break;
+      }
+      if (static_cast<uint32_t>(now - tailIdleUs_) >= kTailUs) {
+        txState_ = TxState::Idle;
+      }
+      break;
   }
 }
 
@@ -133,26 +201,62 @@ void DmxEngine::writePwm() {
   }
 }
 
-void DmxEngine::sendNow() {
-  writePwm();
+void DmxEngine::startFrame() {
+  memcpy(frame_, current_, sizeof(frame_));
+  gpio_set_outover(txPin_, GPIO_OVERRIDE_LOW);
+  delayMicroseconds(kBreakUs);
+  gpio_set_outover(txPin_, GPIO_OVERRIDE_NORMAL);
+  delayMicroseconds(kMabUs);
+  slot_ = 0;
+  startSent_ = false;
+  txState_ = TxState::Data;
+  feedFifo();
+}
+
+void DmxEngine::feedFifo() {
+  while (uart().availableForWrite() > 0) {
+    if (!startSent_) {
+      if (uart().write(static_cast<uint8_t>(0)) != 1) {
+        return;
+      }
+      startSent_ = true;
+      continue;
+    }
+    if (slot_ >= kDmxChannels) {
+      txState_ = TxState::Tail;
+      tailIdleUs_ = 0;
+      return;
+    }
+    if (uart().write(frame_[slot_]) != 1) {
+      return;
+    }
+    ++slot_;
+  }
+}
+
+void DmxEngine::serviceTx() {
   if (!txReady_ || !uartLive_) {
     return;
   }
-  uart().flush();
-  uart().end();
-  pinMode(txPin_, OUTPUT);
-  digitalWrite(txPin_, LOW);
-  delayMicroseconds(88);
-  digitalWrite(txPin_, HIGH);
-  delayMicroseconds(12);
-  uart().begin(250000, SERIAL_8N2);
-  txReady_ = static_cast<bool>(uart());
-  if (!txReady_) {
+  if (txState_ == TxState::Data) {
+    feedFifo();
     return;
   }
-  uart().write(static_cast<uint8_t>(0));
-  uart().write(current_, kDmxChannels);
-  lastSendMs_ = millis();
+  if (txState_ == TxState::Tail) {
+    if (uart().availableForWrite() < 8) {
+      tailIdleUs_ = 0;
+      return;
+    }
+    const uint32_t now = micros();
+    if (tailIdleUs_ == 0) {
+      tailIdleUs_ = now;
+      return;
+    }
+    if (static_cast<uint32_t>(now - tailIdleUs_) < kTailUs) {
+      return;
+    }
+  }
+  startFrame();
 }
 
 }  // namespace dfdmc

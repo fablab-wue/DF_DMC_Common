@@ -37,11 +37,11 @@ Dragonframe realtime upload as int32 steps per frame, plus GIO triggers. SliderM
 begin(txPin, pwmPins, pwmCount, pwmHz, exponential)
 ```
 
-Sends the 512-channel universe on `txPin` (PIO UART, 250000 8N2, BREAK/MAB). Wire levels stay raw 0–255.
+Sends the 512-channel universe on `txPin` (PIO UART, 250000 8N2, BREAK 176 µs, MAB 24 µs). A 150 µs timer keeps frames on the wire at about 40 Hz. Wire levels stay raw 0–255. A quiet bus is not a held look.
 
 `pwmPins` / `pwmCount` mirror the first channels onto high-active PWM. `pwmHz` is 18000 on the current boards, wrap 254. `exponential` applies `level * level / 255` on the PWM pins only (0 = 0%, 128 ≈ 25%, 255 = 100%). Pass a null pin list and count 0 to send the universe with no mirror.
 
-`apply(startChannel, levels, count, ramp)` writes the buffer. `ramp` fades over 500 ms. `update()` must be called from the main loop while a ramp is running.
+`apply(startChannel, levels, count, ramp)` writes the buffer. `ramp` fades over 500 ms. `update()` must be called every pass of the main loop: it advances a ramp and keeps the DMX stream running.
 
 ## GIO — `DmcGio`
 
