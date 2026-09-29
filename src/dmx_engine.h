@@ -2,7 +2,8 @@
 
 // Live DMX512 (PIO UART, 250000 8N2, BREAK 176 µs, MAB 24 µs) and an
 // optional high-active PWM mirror of the first channels. A hardware
-// timer keeps the 512-slot universe on the wire at the full frame rate.
+// timer repeats frames about every 25 ms. The packet covers channels
+// 1..N, where N is the highest channel set non-zero since begin().
 // Wire levels stay raw.
 
 #include "dmc_protocol.h"
@@ -27,6 +28,7 @@ class DmxEngine {
   static bool onTxTimer(repeating_timer_t* timer);
   void onTick();
   void publish(const uint8_t* levels);
+  void noteSlots(uint16_t startChannel, const uint8_t* levels, uint16_t count);
   void startFrame();
   void feedFifo();
   void serviceTx();
@@ -51,10 +53,13 @@ class DmxEngine {
   bool startSent_ = false;
   bool txTimerOn_ = false;
   TxState txState_ = TxState::Idle;
+  uint16_t txSlots_ = 0;
+  uint16_t frameSlots_ = 0;
   uint16_t slot_ = 0;
   uint32_t rampStartMs_ = 0;
   uint32_t markUs_ = 0;
   uint32_t tailIdleUs_ = 0;
+  uint32_t frameStartUs_ = 0;
   repeating_timer_t txTimer_{};
 };
 

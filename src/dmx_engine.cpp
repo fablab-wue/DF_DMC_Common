@@ -19,6 +19,8 @@ constexpr uint32_t kTailUs = 64;
 // 8-deep TX FIFO holds ~384 µs. Refill well inside that, from a timer,
 // so a slow main loop during realtime play cannot stretch the universe.
 constexpr int64_t kTxTickUs = 150;
+// Short packets would otherwise repeat about every millisecond.
+constexpr uint32_t kFramePeriodUs = 25000;
 
 SerialPIO& DmxEngine::uart() { return *reinterpret_cast<SerialPIO*>(uartMem_); }
 
@@ -33,6 +35,9 @@ void DmxEngine::begin(uint8_t txPin, const uint8_t* pwmPins, uint8_t pwmCount, u
   memset(start_, 0, sizeof(start_));
   ramping_ = false;
   txState_ = TxState::Idle;
+  txSlots_ = 0;
+  frameSlots_ = 0;
+  frameStartUs_ = 0;
   if (!uartLive_) {
     new (uartMem_) SerialPIO(txPin_, NOPIN);
     uartLive_ = true;
@@ -55,6 +60,22 @@ void DmxEngine::publish(const uint8_t* levels) {
   noInterrupts();
   memcpy(current_, levels, sizeof(current_));
   interrupts();
+}
+
+void DmxEngine::noteSlots(uint16_t startChannel, const uint8_t* levels, uint16_t count) {
+  uint16_t high = txSlots_;
+  for (uint16_t i = 0; i < count; ++i) {
+    if (levels[i] == 0) {
+      continue;
+    }
+    const uint16_t channel = static_cast<uint16_t>(startChannel + i);
+    if (channel > high) {
+      high = channel;
+    }
+  }
+  if (high > txSlots_) {
+    txSlots_ = high;
+  }
 }
 
 uint8_t DmxEngine::levelAt(uint16_t channel1) const {
@@ -86,6 +107,7 @@ void DmxEngine::apply(uint16_t startChannel, const uint8_t* levels, uint16_t cou
   memcpy(start_, current_, sizeof(current_));
   memcpy(target_, current_, sizeof(target_));
   memcpy(target_ + start, levels, count);
+  noteSlots(startChannel, levels, count);
   if (!ramp) {
     publish(target_);
     ramping_ = false;
@@ -124,7 +146,11 @@ void DmxEngine::onTick() {
   const uint32_t now = micros();
   switch (txState_) {
     case TxState::Idle:
+      if (txSlots_ == 0 || static_cast<uint32_t>(now - frameStartUs_) < kFramePeriodUs) {
+        break;
+      }
       gpio_set_outover(txPin_, GPIO_OVERRIDE_LOW);
+      frameStartUs_ = now;
       markUs_ = now;
       txState_ = TxState::Break;
       break;
@@ -137,7 +163,11 @@ void DmxEngine::onTick() {
       break;
     case TxState::Mab:
       if (static_cast<uint32_t>(now - markUs_) >= kMabUs) {
-        memcpy(frame_, current_, sizeof(frame_));
+        frameSlots_ = txSlots_;
+        if (frameSlots_ > kDmxChannels) {
+          frameSlots_ = kDmxChannels;
+        }
+        memcpy(frame_, current_, frameSlots_);
         slot_ = 0;
         startSent_ = false;
         txState_ = TxState::Data;
@@ -202,7 +232,18 @@ void DmxEngine::writePwm() {
 }
 
 void DmxEngine::startFrame() {
-  memcpy(frame_, current_, sizeof(frame_));
+  const uint32_t now = micros();
+  if (txSlots_ == 0 || static_cast<uint32_t>(now - frameStartUs_) < kFramePeriodUs) {
+    return;
+  }
+  frameStartUs_ = now;
+  frameSlots_ = txSlots_;
+  if (frameSlots_ > kDmxChannels) {
+    frameSlots_ = kDmxChannels;
+  }
+  noInterrupts();
+  memcpy(frame_, current_, frameSlots_);
+  interrupts();
   gpio_set_outover(txPin_, GPIO_OVERRIDE_LOW);
   delayMicroseconds(kBreakUs);
   gpio_set_outover(txPin_, GPIO_OVERRIDE_NORMAL);
@@ -222,7 +263,7 @@ void DmxEngine::feedFifo() {
       startSent_ = true;
       continue;
     }
-    if (slot_ >= kDmxChannels) {
+    if (slot_ >= frameSlots_) {
       txState_ = TxState::Tail;
       tailIdleUs_ = 0;
       return;
