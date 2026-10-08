@@ -38,7 +38,7 @@ class DmcGio {
   uint32_t outBits_ = 0;
   uint32_t inBits_ = 0;
   uint32_t inStable_ = 0;
-  int debounce_ = 0;
+  uint32_t debounceSinceMs_ = 0;
   bool camShutter_ = false;
   unsigned buzzerRemainMs_ = 0;
   uint32_t lastTickMs_ = 0;

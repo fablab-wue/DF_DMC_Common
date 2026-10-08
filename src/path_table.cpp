@@ -2,6 +2,7 @@
 
 #include "dmc_protocol.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace dfdmc {
@@ -96,6 +97,40 @@ void PathTable::storeTrigger(uint32_t mask, uint32_t index, uint32_t value) {
 bool PathTable::finishUpload() {
   ready_ = frameCount_ > 0;
   return ready_;
+}
+
+int32_t PathTable::sampleSteps(int axis0, double frameTime, bool extrapolate) const {
+  if (axis0 < 0 || axis0 >= axisCount_ || frameCount_ <= 0) {
+    return 0;
+  }
+  if (frameCount_ == 1) {
+    return pos_[axis0][0];
+  }
+  const double local = frameTime - static_cast<double>(startFrame_);
+  const auto at = [this, axis0](int index) { return pos_[axis0][index]; };
+  const auto lerp = [](int32_t a, int32_t b, double u) {
+    const double delta = static_cast<double>(b) - static_cast<double>(a);
+    return a + static_cast<int32_t>(lround(delta * u));
+  };
+  const double last = static_cast<double>(frameCount_ - 1);
+  if (local <= 0.0) {
+    if (!extrapolate) {
+      return at(0);
+    }
+    return lerp(at(0), at(1), local);
+  }
+  if (local >= last) {
+    if (!extrapolate) {
+      return at(frameCount_ - 1);
+    }
+    return lerp(at(frameCount_ - 2), at(frameCount_ - 1), local - (last - 1.0));
+  }
+  const int i0 = static_cast<int>(floor(local));
+  const int i1 = i0 + 1;
+  if (i1 >= frameCount_) {
+    return at(frameCount_ - 1);
+  }
+  return lerp(at(i0), at(i1), local - static_cast<double>(i0));
 }
 
 int32_t PathTable::positionSteps(int axis0, int localFrame) const {

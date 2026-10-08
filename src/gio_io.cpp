@@ -40,7 +40,7 @@ void DmcGio::begin(const GioMap& map) {
   outBits_ = 0;
   inBits_ = readInputs();
   inStable_ = inBits_;
-  debounce_ = 0;
+  debounceSinceMs_ = millis();
   camShutter_ = false;
   buzzerRemainMs_ = 0;
   lastTickMs_ = millis();
@@ -55,18 +55,16 @@ void DmcGio::setOutputs(uint32_t bits) {
 }
 
 bool DmcGio::pollInputChange() {
-  const uint32_t now = readInputs();
-  if (now == inBits_) {
-    if (debounce_ < 5) {
-      ++debounce_;
-    }
-    if (debounce_ >= 5 && now != inStable_) {
-      inStable_ = now;
-      return true;
-    }
-  } else {
-    inBits_ = now;
-    debounce_ = 0;
+  const uint32_t nowBits = readInputs();
+  const uint32_t now = millis();
+  if (nowBits != inBits_) {
+    inBits_ = nowBits;
+    debounceSinceMs_ = now;
+    return false;
+  }
+  if (inBits_ != inStable_ && static_cast<uint32_t>(now - debounceSinceMs_) >= 20) {
+    inStable_ = inBits_;
+    return true;
   }
   return false;
 }

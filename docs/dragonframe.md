@@ -4,15 +4,15 @@
 
 Connect, steps per unit, features, limits, GIO, and pin tables are in the [user manual](manual.md). This page is the shoot-frame payload.
 
-Dragonframe only offers these messages when the hello capabilities include the matching bit: `GO_MOTION` `0x0002` for `SHOOT_FRAME`, `GO_MOTION2` `0x0080` for `SHOOT_FRAME2`. PWM and MKS advertise both. MC does not.
+Dragonframe only offers these messages when the hello capabilities include the matching bit: `GO_MOTION` `0x0002` for `SHOOT_FRAME`, `GO_MOTION2` `0x0080` for `SHOOT_FRAME2`. MC, PWM, and MKS advertise both.
 
 Using Dragonframe’s own description of an external rig: [Using Dragonframe 2025](https://www.dragonframe.com/download/Using%20Dragonframe%202025.pdf), Chapter 15, “Using Go-Motion with an External Motion Control System”, page 265.
 
 ## Messages
 
-Axes take part only when `MOTOR_CONFIGURE` has the blur flag `0x02`. Other axes hold the frame pose. PWM and MKS advertise both shoot messages. MC does not.
+Axes take part only when `MOTOR_CONFIGURE` has the blur flag `0x02`. Other axes hold the frame pose. MC, PWM, and MKS advertise both shoot messages.
 
-Sequence for both: the device prerolls and stops; `GO` before that is idle returns not-in-position (`0x0016`); `GO` runs the blur; the local camera shutter opens only while the axis should be at constant speed. A still does not send `MSG_RT_END` (that message is for live path playback).
+Sequence for both: the device prerolls and stops; `GO` before that is idle returns not-in-position (`0x0016`); `GO` runs the blur; the local camera shutter opens only while the axis should be at constant speed. When the exposure finishes, or the shoot is aborted, the device sends `MSG_RT_END`.
 
 ### SHOOT_FRAME (`0x0112`)
 
@@ -34,7 +34,7 @@ If the open angle is negative, the shutter opens at `GO` and the motors wait −
 
 ## Using go motion
 
-1. Connect the DMC device as in the [user manual](manual.md#connect). PWM and MKS run go motion. MC does not advertise it.
+1. Connect the DMC device as in the [user manual](manual.md#connect). MC, PWM, and MKS run go motion.
 2. In the arc / motion-control axis setup, enable the axis and turn on blur (go motion) for the axes that should move during the exposure. Axes without blur stay on the frame pose.
 3. Upload or capture the move so the path is on the device.
 4. In the go-motion / exposure controls, set exposure time and blur percent. That uses `SHOOT_FRAME`. A blur of 50% moves about half a frame of the path while the shutter is open, with one second of acceleration before and one second of deceleration after.

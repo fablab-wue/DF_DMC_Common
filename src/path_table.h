@@ -35,6 +35,7 @@ class PathTable {
   uint32_t triggerMask() const { return triggerMask_; }
 
   int32_t positionSteps(int axis0, int localFrame) const;
+  int32_t sampleSteps(int axis0, double frameTime, bool extrapolate) const;
   bool localFrame(int dfFrame, int* out) const;
   uint8_t triggerAtLocal(int localFrame) const;
   int dmxSlotCount() const { return dmxSlots_; }

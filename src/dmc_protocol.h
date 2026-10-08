@@ -50,6 +50,8 @@ constexpr uint32_t kDmcAckErrUnsupported = 0x0013;
 constexpr uint32_t kDmcAckErrRange = 0x0014;
 constexpr uint32_t kDmcAckErrGeneral = 0x0015;
 constexpr uint32_t kDmcAckErrNotInPosition = 0x0016;
+constexpr uint32_t kDmcAckErrPreroll = 0x0017;
+constexpr uint32_t kDmcAckErrPostroll = 0x0018;
 constexpr uint32_t kDmcAckErrSoftUp = 0x0020;
 constexpr uint32_t kDmcAckErrSoftLow = 0x0021;
 
@@ -62,6 +64,13 @@ constexpr uint32_t kDmcCapRealTimeCamera = 0x0400;
 constexpr uint32_t kDmcDmxFlagFinalSet = 0x80000000U;
 constexpr uint32_t kDmcGioCamShutter = 0x0001;
 constexpr uint32_t kDmcGioCamMeter = 0x0002;
+constexpr uint16_t kDmcRtFlagPingPong = 0x0001;
+constexpr uint16_t kDmcRtFlagLoop = 0x0002;
+constexpr uint16_t kDmcRtFlagCameraVideo = 0x0010;
+constexpr uint16_t kDmcRtFlagCameraStills = 0x0020;
+constexpr uint32_t kDmcBloopGio0 = 0x0001;
+constexpr uint32_t kDmcBloopGio1 = 0x0002;
+constexpr uint32_t kDmcStopAllHardMs = 500;
 
 struct DmcFrame {
   uint32_t id = 0;
@@ -85,6 +94,47 @@ bool readByte(const std::vector<uint8_t>& payload, size_t offset, uint8_t* value
 bool readWordLE(const std::vector<uint8_t>& payload, size_t offset, uint16_t* value);
 bool readDwordLE(const std::vector<uint8_t>& payload, size_t offset, uint32_t* value);
 bool readSignedDwordLE(const std::vector<uint8_t>& payload, size_t offset, int32_t* value);
+
+struct RtRunMove {
+  uint32_t fpsX1000 = 24000;
+  int32_t startFrame = 1;
+  int32_t endFrame = 1;
+  uint32_t prerollMs = 0;
+  uint32_t postrollMs = 0;
+  bool syncDmx = false;
+  uint32_t bloopLocation = 0;
+  uint16_t bloopDmx = 0;
+  uint16_t bloopTimeMs = 0;
+  uint16_t flags = 0;
+  int16_t cameraOpen = 0;
+  int16_t cameraClose = 0;
+  bool hasCameraAngles = false;
+};
+
+struct LiveDmx {
+  bool ramp = false;
+  uint16_t channel = 1;
+  uint16_t count = 0;
+  const uint8_t* levels = nullptr;
+};
+
+enum class LiveDmxStatus : uint8_t { kOk, kGeneral, kRange };
+
+struct RtPlaySpan {
+  double prerollFrame = 1;
+  double postrollFrame = 1;
+  int playFrom = 1;
+  int playTo = 1;
+};
+
+bool parseRtRunMove(const std::vector<uint8_t>& payload, RtRunMove* out);
+void rollFrameTimes(const RtRunMove& move, double* prerollFrame, double* postrollFrame);
+void rtPlaySpan(const RtRunMove& move, RtPlaySpan* out);
+uint32_t framePeriodUs(uint32_t fpsX1000);
+uint32_t moveTimeThousandths(int32_t frame);
+uint32_t softLimitFault(bool lowerEn, int32_t lower, bool upperEn, int32_t upper, int32_t steps);
+LiveDmxStatus parseLiveDmx(const std::vector<uint8_t>& payload, LiveDmx* out);
+bool writeUsbFrame(const uint8_t* data, size_t size);
 
 class DmcParser {
  public:

@@ -58,8 +58,8 @@ Hello capabilities and what the bridge actually does:
 | | MC | PWM | MKS |
 |--|----|-----|-----|
 | Real-time path (`0x0001`) | yes | yes | yes |
-| Go motion `SHOOT_FRAME` (`0x0002`) | no | yes | yes |
-| Go motion `SHOOT_FRAME2` (`0x0080`) | no | yes | yes |
+| Go motion `SHOOT_FRAME` (`0x0002`) | yes | yes | yes |
+| Go motion `SHOOT_FRAME2` (`0x0080`) | yes | yes | yes |
 | Real-time camera (`0x0400`) | yes | yes | yes |
 | Live DMX `0x0020` | 512 channels | 512 channels | 512 channels |
 | Timeline DMX with the move | 32 channels | 32 channels | 32 channels |
@@ -72,12 +72,12 @@ Shared behavior:
 
 - **Upload** (`0x0100`–`0x0104`) stores the move on the board: one step position per axis per frame, GIO output bits on frames that have triggers, and up to 32 DMX channels.
 - **Playhead.** Dragging the Arc playhead sends `MSG_RT_POSITION_FRAME` (`0x0110`). The board moves every axis to that frame and, when a lighting track was uploaded, sets those DMX channels.
-- **Play.** `MSG_RT_RUN_MOVE` (`0x0111`) moves to the start pose and waits. `MSG_RT_GO` (`0x0113`) starts the clock only after the axes are idle. If they are still moving, the board answers not-in-position (`0x0016`). Each new frame sends a position report whose time field is that frame number. When the move asked to sync DMX, the stored lighting for that frame goes out with it. `MSG_RT_END` (`0x0114`) is sent when playback finishes.
+- **Play.** `MSG_RT_RUN_MOVE` (`0x0111`) moves to the preroll pose and waits. That pose is half a preroll interval before the start frame, the point a rest-to-cruise ramp leaves so it reaches the start frame at speed. PWM and MKS then step from that frame through the postroll pose. MC moves to the preroll pose, plays the uploaded range on SliderMC, then moves to the postroll pose. If the preroll or postroll pose would pass a soft limit, the board answers preroll (`0x0017`) or postroll (`0x0018`). A frame inside the played range that would pass a soft limit is rejected with the soft-limit code. `MSG_RT_GO` (`0x0113`) starts the clock only after the axes are idle. If they are still moving, the board answers not-in-position (`0x0016`). Each new frame sends a position report whose time field is thousandths of a frame (frame 2 is 2000). When the move asked to sync DMX, the stored lighting for that frame goes out with it. Video (`0x10`) holds the camera shutter open for the move. Stills (`0x20`) open it on each frame between the shutter angles. `MSG_RT_END` (`0x0114`) is sent when playback finishes and when a go-motion exposure finishes or is aborted.
 - **Live DMX** (`0x0020`) writes channel levels now. Ramp follows the message flag. This is independent of the stored lighting track. Chapter 14, Automate Lighting with DMX, page 223. Connecting a universe: page 227. Previewing a program: page 245. Dragonframe’s own realtime lighting on a DMC-32 plays a full universe from the controller. These boards play the uploaded track for **32 channels**. A 33rd channel is rejected (`0x0014`).
 - **Jog.** The speed word is 1–10000. 10000 is the axis max from `MOTOR_SET_SPEED`.
-- **Stop.** Stop-all and hard-stop halt every axis. Stop-one halts that axis and leaves the others running, on MC by retargeting only that channel, on PWM and MKS directly.
+- **Stop.** Stop-all and hard-stop halt every axis. A second stop-all within about 500 ms hard-stops. PWM cuts the slew. MKS sends the drive hard-stop. MC sends SliderMC `MS` again, which is its only stop. Stop-one on MC and MKS halts that axis. PWM stop-one cuts the whole servo bank. Stopping during a go-motion shoot sends `MSG_RT_END`.
 
-MC does not advertise go motion. Do not expect blur on SliderMC through this board. PWM blur is a real pulse trapezoid. MKS blur is one linear RPM move; the shutter still follows Dragonframe’s clock. See [Go motion](dragonframe.md#go-motion). Dragonframe’s go-motion chapter for an external rig is Chapter 15, page 265.
+All three boards advertise go motion. PWM blur is a real pulse trapezoid. MKS blur is one linear RPM move. MC runs the blur as a timed SliderMC move. The shutter follows Dragonframe’s clock, and the board sends `MSG_RT_END` when the exposure finishes. See [Go motion](dragonframe.md#go-motion). Dragonframe’s go-motion chapter for an external rig is Chapter 15, page 265.
 
 ## Limits
 
@@ -87,7 +87,7 @@ MC does not advertise go motion. Do not expect blur on SliderMC through this boa
 - **Servo pulse** about −20000..+20000 counts around a 1.5 ms center (about 0.5 ms to 2.5 ms). Values outside that are clamped. A curve of 0–90 does not leave a hobby servo’s deadband.
 - **MKS acceleration** is a linear RPM staircase. The drive’s accel code is 0–255. A one-second Dragonframe ramp at low RPM will not match the screen. Slow moves have short ramps. Eight drives on one RS485 bus can lag a 24 fps slice; servo and DMX frames still advance on the clock.
 - **MKS homing.** There is no DMC home command. Jog to the mark, then `MOTOR_RESET_POSITION` (`0x0035`). That zeroes the reported count. It does not run the drive’s own go-home.
-- **MC soft limits.** A point move outside the enabled `SL`/`SR` window is rejected: lower `0x0021`, upper `0x0020`. The hardware limit-switch flag in `MOTOR_SET_LIMITS` is ignored until a switch is wired on this Zero.
+- **Soft limits.** A point move or jog outside an enabled limit is rejected: lower `0x0021`, upper `0x0020`. A preroll or postroll pose past an enabled limit is rejected with `0x0017` or `0x0018`. A frame of the played range past a limit is rejected with the soft-limit code. The hardware limit-switch flag in `MOTOR_SET_LIMITS` is ignored until a switch is wired.
 - **No virtual rigs, no coupled motors, no ping-pong loop.** Those capability bits are not set.
 
 ## GIO inputs and outputs
@@ -96,7 +96,7 @@ These are Dragonframe’s general-purpose triggers. They are not the camera shut
 
 **GIO OUT** (`MSG_GIO_OUT`, `0x0021`). One bit per output. Bit 0 is the first pin in that board’s list. A set bit turns the pin **on**: open-collector, driven **low**. A clear bit releases the pin to its pull-up, so the wire sits **high**. The same bits can be stored on frames of the move (`0x0104`) and are applied when that frame is shown. They are not PWM and not DMX.
 
-**GIO IN** (`MSG_GIO_IN`, `0x0022`). The pin is a pull-up. A switch to ground reads as that bit **set** (active **low**). The board answers a poll, and also sends an unsolicited input message after the level has stayed the same for a few loops.
+**GIO IN** (`MSG_GIO_IN`, `0x0022`). The pin is a pull-up. A switch to ground reads as that bit **set** (active **low**). The board answers a poll, and also sends an unsolicited input message after the level has stayed the same for about 20 ms.
 
 | Board | Outputs | Inputs |
 |-------|---------|--------|

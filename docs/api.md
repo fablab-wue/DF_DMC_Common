@@ -11,7 +11,7 @@ lib_deps =
     symlink://../DF_DMC_Common
 ```
 
-`DFDMC_MAX_AXES` sizes the path table (default 6). `DF_DMC_2_PWM` sets 16. Optional `DFDMC_MAX_UPLOAD_FRAMES` defaults to 2048.
+`DFDMC_MAX_AXES` sizes the path table (default 6). `DF_DMC_2_PWM` sets 16. Optional `DFDMC_MAX_UPLOAD_FRAMES` defaults to 1440.
 
 ## DMC framing — `dmc_protocol`
 
